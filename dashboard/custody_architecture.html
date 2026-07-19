@@ -1,0 +1,707 @@
+<meta charset="utf-8">
+<title>Custodia — Chain of Custody for Training Data</title>
+<style>
+  :root {
+    --bg: #EEF0F2;
+    --surface: #FFFFFF;
+    --tertiary: #F5F5F5;
+    --ink: #171B21;
+    --muted: #5A6472;
+    --faint: #6C7581;
+    --accent: #B5652A;
+    --accent-dark: #96541F;
+    --accent-ink: #ffffff;
+    --good: #3C8567;
+    --good-bg: #E3EFE8;
+    --warning: #B5652A;
+    --warning-bg: color-mix(in srgb, #B5652A 10%, #FFFFFF);
+    --error: #C24444;
+    --error-bg: rgba(194,68,68,0.10);
+    --line: #D7DBE0;
+    --shadow: 0 1px 2px rgba(23,27,33,0.04), 0 6px 16px -8px rgba(23,27,33,0.10);
+    --shadow-hover: 0 10px 24px -8px rgba(23,27,33,0.18);
+    --dot-grid: rgba(23,27,33,0.05);
+    --radius: 8px;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12161C; --surface: #1A2029; --tertiary: #212938;
+      --ink: #E8E6DE; --muted: #8B93A1; --faint: #8A93A3;
+      --accent: #D98A4C; --accent-dark: #E8A366; --accent-ink: #14100A;
+      --good: #7CC4A4; --good-bg: #1D2B26;
+      --warning: #D98A4C; --warning-bg: color-mix(in srgb, #D98A4C 14%, #1A2029);
+      --error: #E08080; --error-bg: rgba(224,128,128,0.14);
+      --line: #2A3140;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 10px 24px -10px rgba(0,0,0,0.55);
+      --shadow-hover: 0 14px 32px -8px rgba(0,0,0,0.6);
+      --dot-grid: rgba(232,230,222,0.06);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12161C; --surface: #1A2029; --tertiary: #212938;
+    --ink: #E8E6DE; --muted: #8B93A1; --faint: #8A93A3;
+    --accent: #D98A4C; --accent-dark: #E8A366; --accent-ink: #14100A;
+    --good: #7CC4A4; --good-bg: #1D2B26;
+    --warning: #D98A4C; --warning-bg: color-mix(in srgb, #D98A4C 14%, #1A2029);
+    --error: #E08080; --error-bg: rgba(224,128,128,0.14);
+    --line: #2A3140;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 10px 24px -10px rgba(0,0,0,0.55);
+    --shadow-hover: 0 14px 32px -8px rgba(0,0,0,0.6);
+    --dot-grid: rgba(232,230,222,0.06);
+  }
+  :root[data-theme="light"] {
+    --bg: #EEF0F2; --surface: #FFFFFF; --tertiary: #F5F5F5;
+    --ink: #171B21; --muted: #5A6472; --faint: #6C7581;
+    --accent: #B5652A; --accent-dark: #96541F; --accent-ink: #ffffff;
+    --good: #3C8567; --good-bg: #E3EFE8;
+    --warning: #B5652A; --warning-bg: color-mix(in srgb, #B5652A 10%, #FFFFFF);
+    --error: #C24444; --error-bg: rgba(194,68,68,0.10);
+    --line: #D7DBE0;
+    --shadow: 0 1px 2px rgba(23,27,33,0.04), 0 6px 16px -8px rgba(23,27,33,0.10);
+    --shadow-hover: 0 10px 24px -8px rgba(23,27,33,0.18);
+    --dot-grid: rgba(23,27,33,0.05);
+  }
+
+  * { box-sizing: border-box; }
+  html { scrollbar-gutter: stable both-edges; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(var(--dot-grid) 1px, transparent 1px) 0 0 / 22px 22px,
+      var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    padding: 28px clamp(20px, 4vw, 56px) 56px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .page-content { width: 100%; }
+
+  .brand {
+    max-width: 1180px; margin: 0 auto 18px; display: flex; align-items: baseline; gap: 9px;
+    font-family: var(--mono); font-size: 13.5px; font-weight: 700; color: var(--ink);
+  }
+  .brand-mark { color: var(--accent); font-size: 12px; }
+  .brand-sub { font-family: var(--sans); font-size: 12px; font-weight: 400; color: var(--muted); }
+
+  /* ---------------- tab bar ---------------- */
+  .tabbar {
+    max-width: 1180px; margin: 0 auto 26px; display: flex; gap: 6px; flex-wrap: wrap;
+    border-bottom: 1px solid var(--line); padding-bottom: 0;
+  }
+  .tab-btn {
+    font-family: var(--mono); font-size: 13px; font-weight: 600; letter-spacing: 0.02em;
+    color: var(--muted); background: transparent; border: none; cursor: pointer;
+    padding: 10px 14px 12px; position: relative; display: flex; align-items: center; gap: 7px;
+    transition: color 0.15s ease;
+  }
+  .tab-btn .tab-n { color: var(--faint); font-size: 11px; }
+  .tab-btn:hover { color: var(--ink); }
+  .tab-btn::after {
+    content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px;
+    background: var(--accent); transform: scaleX(0); transition: transform 0.2s ease;
+  }
+  .tab-btn.active { color: var(--ink); }
+  .tab-btn.active .tab-n { color: var(--accent); }
+  .tab-btn.active::after { transform: scaleX(1); }
+  .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .tab-panel { display: none; max-width: 1180px; margin: 0 auto; }
+  .tab-panel.active {
+    display: flex; flex-direction: column; justify-content: center;
+    min-height: max(46vh, 460px);
+  }
+
+  /* ---------------- shared bits ---------------- */
+  .thesis { max-width: 900px; margin: 10px auto 34px; text-align: center; }
+  .thesis .eyebrow {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 12px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    opacity: 0; animation: reveal 0.5s ease-out forwards;
+  }
+  .thesis .eyebrow::before, .thesis .eyebrow::after {
+    content: ""; height: 1px; width: 28px; background: var(--line);
+  }
+  .thesis h1 {
+    font-family: var(--mono); font-size: clamp(20px, 2.6vw, 28px); line-height: 1.42;
+    font-weight: 600; margin: 0; text-wrap: balance; letter-spacing: -0.01em;
+    opacity: 0; animation: reveal 0.5s ease-out 0.1s forwards;
+  }
+  .thesis h1 em { font-style: normal; color: var(--accent); }
+  .thesis .insight {
+    font-family: var(--sans); font-size: 14px; color: var(--muted); margin: 16px auto 0;
+    line-height: 1.6; max-width: 720px;
+    opacity: 0; animation: reveal 0.5s ease-out 0.2s forwards;
+  }
+  .thesis .insight b { color: var(--ink); font-weight: 600; }
+
+  .novelty {
+    max-width: 1180px; margin: 0 auto; display: flex; align-items: flex-start; gap: 14px;
+    background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+    border-left: 4px solid var(--accent);
+    border-radius: var(--radius); padding: 20px 24px;
+    opacity: 0; animation: reveal 0.5s ease-out 0.3s forwards;
+  }
+  .novelty svg { flex: none; width: 22px; height: 22px; stroke: var(--accent); margin-top: 2px; }
+  .novelty p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.6; }
+  .novelty p b { color: var(--ink); font-weight: 600; }
+  .novelty p .tag {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 6px;
+  }
+
+  .section-label { display: flex; align-items: center; gap: 8px; margin: 0 0 16px; }
+  .section-label svg { width: 15px; height: 15px; stroke: var(--accent); flex: none; }
+  .section-label span {
+    font-family: var(--mono); font-size: 11.5px; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--faint);
+  }
+  .section-label::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+  /* ---------------- attack surface: threat-model board ---------------- */
+  .threat-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; align-items: start; }
+  @media (max-width: 880px) { .threat-board { grid-template-columns: 1fr; } }
+
+  .threat-lane {
+    display: flex; flex-direction: column; gap: 10px;
+    opacity: 0; animation: reveal 0.4s ease-out forwards;
+  }
+  .threat-board .threat-lane:nth-child(1) { animation-delay: 0.05s; }
+  .threat-board .threat-lane:nth-child(2) { animation-delay: 0.15s; }
+  .threat-board .threat-lane:nth-child(3) { animation-delay: 0.25s; }
+
+  .threat-lane-head {
+    display: flex; align-items: baseline; gap: 7px; padding-bottom: 8px;
+    border-bottom: 2px solid var(--line);
+  }
+  .threat-lane-head .layer-tag {
+    font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--accent-ink);
+    background: var(--accent); border-radius: 3px; padding: 2px 6px; letter-spacing: 0.04em;
+  }
+  .threat-lane-head span.name {
+    font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--ink);
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+
+  .threat-card {
+    background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    border-radius: 6px; padding: 11px 13px; box-shadow: var(--shadow);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  }
+  .threat-card:hover { box-shadow: var(--shadow-hover); transform: translateX(2px); }
+  .threat-card .t-name { font-family: var(--sans); font-size: 13px; font-weight: 600; color: var(--ink); }
+  .threat-card .t-caught {
+    font-family: var(--mono); font-size: 10.5px; color: var(--muted); margin-top: 4px; line-height: 1.5;
+  }
+  .threat-card .t-evidence {
+    display: inline-flex; align-items: center; gap: 4px; margin-top: 7px;
+    font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em;
+    text-transform: uppercase; color: var(--good); background: var(--good-bg);
+    border-radius: 3px; padding: 2px 7px;
+  }
+  .threat-card .t-evidence.demo { color: var(--faint); background: var(--tertiary); }
+
+  .threat-accepted {
+    grid-column: 1 / -1; margin-top: 4px;
+    background: var(--warning-bg); border: 1px dashed var(--warning);
+    border-radius: 6px; padding: 14px 16px;
+    display: flex; align-items: flex-start; gap: 12px;
+    opacity: 0; animation: reveal 0.4s ease-out 0.4s forwards;
+  }
+  .threat-accepted svg { flex: none; width: 18px; height: 18px; stroke: var(--warning); margin-top: 2px; }
+  .threat-accepted .t-name { font-family: var(--sans); font-size: 13px; font-weight: 600; color: var(--ink); }
+  .threat-accepted .t-caught { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .threat-accepted .t-evidence {
+    display: inline-flex; margin-top: 6px; font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+    letter-spacing: 0.05em; text-transform: uppercase; color: var(--warning);
+  }
+
+  /* ---------------- pipeline / architecture ---------------- */
+  .pipeline { display: flex; align-items: stretch; gap: 0; position: relative; }
+  @media (max-width: 880px) {
+    .pipeline { flex-direction: column; gap: 28px; }
+    .connector { flex-direction: row !important; min-width: unset !important; padding: 0 !important; width: 100% !important; height: 32px; }
+    .connector .arrow-line { width: 100%; height: 1px; }
+    .connector .arrow-head { transform: rotate(90deg); }
+    .connector .flow-dot { animation-name: flowRight !important; top: 50% !important; left: 0 !important; margin-top: -2px; }
+  }
+
+  .stage {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    flex: 1; min-width: 0; padding: 18px 18px 16px;
+    display: flex; flex-direction: column; gap: 10px; position: relative;
+    opacity: 0; animation: reveal 0.5s cubic-bezier(.2,.7,.3,1) forwards;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .stage:hover { border-color: var(--accent); box-shadow: var(--shadow-hover); }
+  .stage:nth-of-type(1) { animation-delay: 0.05s; }
+  .pipeline .connector:nth-of-type(2) { animation-delay: 0.55s; }
+  .stage:nth-of-type(3) { animation-delay: 0.95s; }
+  .pipeline .connector:nth-of-type(4) { animation-delay: 1.45s; }
+  .stage:nth-of-type(5) { animation-delay: 1.85s; }
+
+  @keyframes reveal {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .stage, .connector, .results, .limit, .pill, .flow-dot, .chip, .thesis *, .novelty { animation: none !important; opacity: 1 !important; }
+  }
+
+  .stage::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 40%, transparent));
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+  .stage-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .stage-head-left { display: flex; align-items: baseline; gap: 9px; }
+  .stage-num { font-family: var(--mono); font-size: 11.5px; color: var(--accent); font-weight: 700; letter-spacing: 0.02em; }
+  .stage-name { font-family: var(--mono); font-size: 14.5px; font-weight: 700; letter-spacing: -0.01em; }
+
+  .pill {
+    position: relative;
+    font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+    color: var(--accent-ink); background: var(--good); border-radius: 4px;
+    padding: 3px 8px 3px 17px; text-transform: uppercase; white-space: nowrap;
+    opacity: 0; animation: pillIn 0.3s ease-out forwards;
+  }
+  .pill::before {
+    content: ""; position: absolute; left: 8px; top: 50%; width: 4px; height: 4px;
+    margin-top: -2px; border-radius: 50%; background: var(--accent-ink);
+  }
+  .pill::after {
+    content: ""; position: absolute; left: 8px; top: 50%; width: 4px; height: 4px;
+    margin-top: -2px; border-radius: 50%; border: 1px solid var(--accent-ink);
+    animation: pulseRing 1.6s ease-out 1;
+  }
+  .stage:nth-of-type(1) .pill { animation-delay: 0.55s; }
+  .stage:nth-of-type(1) .pill::after { animation-delay: 0.55s; }
+  .stage:nth-of-type(3) .pill { animation-delay: 1.45s; }
+  .stage:nth-of-type(3) .pill::after { animation-delay: 1.45s; }
+  .stage:nth-of-type(5) .pill { animation-delay: 2.35s; }
+  .stage:nth-of-type(5) .pill::after { animation-delay: 2.35s; }
+  @keyframes pillIn { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
+  @keyframes pulseRing {
+    0% { transform: scale(1); opacity: 0.9; }
+    100% { transform: scale(4.5); opacity: 0; }
+  }
+
+  .stage-mech {
+    font-family: var(--mono); font-size: 11.5px; color: var(--muted); line-height: 1.5;
+    padding: 8px 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 2px;
+    word-break: break-word;
+  }
+  .stage-stat {
+    font-family: var(--mono); font-size: 12px; color: var(--ink); font-weight: 600;
+    font-variant-numeric: tabular-nums; display: flex; gap: 6px; align-items: baseline;
+  }
+  .stage-stat span.dim { color: var(--muted); font-weight: 400; }
+
+  .checks { display: flex; flex-direction: column; gap: 6px; margin: 1px 0; }
+  .check { font-family: var(--sans); font-size: 13px; color: var(--ink); display: flex; gap: 7px; line-height: 1.42; }
+  .check .dot { flex: none; width: 4px; height: 4px; border-radius: 50%; background: var(--good); margin-top: 8px; }
+  .check b { font-weight: 600; }
+
+  .catches {
+    margin-top: auto; padding-top: 10px; border-top: 1px dashed var(--line);
+    font-size: 12px; color: var(--muted); line-height: 1.5;
+  }
+  .catches .label {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--faint); display: block; margin-bottom: 4px;
+  }
+
+  .connector {
+    flex: none; width: 78px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 6px; padding: 0 4px;
+    opacity: 0; animation: reveal 0.4s ease-out forwards; position: relative;
+  }
+  .arrow-line {
+    width: 1px; flex: 1; min-height: 24px; position: relative; overflow: visible;
+    background: repeating-linear-gradient(180deg, var(--faint) 0 4px, transparent 4px 8px);
+  }
+  .flow-dot {
+    position: absolute; left: 50%; top: 0; width: 4px; height: 4px; margin-left: -2px;
+    border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 6px 1px color-mix(in srgb, var(--accent) 70%, transparent);
+    opacity: 0; animation: flowDown 1s ease-in 1;
+  }
+  .connector:nth-of-type(2) .flow-dot { animation-delay: 0.75s; }
+  .connector:nth-of-type(4) .flow-dot { animation-delay: 1.65s; }
+  @keyframes flowDown {
+    0% { top: 0%; opacity: 0; }
+    15% { opacity: 1; }
+    85% { opacity: 1; }
+    100% { top: 96%; opacity: 0; }
+  }
+  @keyframes flowRight {
+    0% { left: 0%; opacity: 0; }
+    15% { opacity: 1; }
+    85% { opacity: 1; }
+    100% { left: 96%; opacity: 0; }
+  }
+  .arrow-head {
+    width: 7px; height: 7px; border-right: 1.5px solid var(--faint); border-bottom: 1.5px solid var(--faint);
+    transform: rotate(-45deg); margin-top: -4px;
+  }
+  .arrow-label { font-family: var(--mono); font-size: 10.5px; color: var(--muted); text-align: center; letter-spacing: 0.01em; white-space: nowrap; }
+
+  /* ---------------- metrics ---------------- */
+  .results {
+    background: linear-gradient(180deg, var(--good-bg), var(--surface) 55%);
+    border: 1px solid var(--line); border-top: 3px solid var(--good);
+    border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px 28px 22px;
+    opacity: 0; animation: reveal 0.5s ease-out 0.05s forwards;
+  }
+  .results .results-eyebrow {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--good); font-weight: 700; margin: 0 0 16px;
+  }
+  .results-top { display: flex; align-items: center; gap: 34px; flex-wrap: wrap; }
+  .results .stat-row { display: flex; gap: 38px; flex-wrap: wrap; flex: 1; }
+  .stat { display: flex; flex-direction: column; gap: 3px; }
+  .stat .n { font-family: var(--mono); font-size: 36px; font-weight: 700; color: var(--good); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .stat .k { font-family: var(--sans); font-size: 12.5px; color: var(--muted); }
+  .results .fp {
+    display: flex; flex-direction: column; gap: 3px; flex: none;
+    padding-left: 26px; border-left: 1px solid var(--line);
+  }
+  .results .fp .n2 {
+    font-family: var(--mono); font-size: 36px; font-weight: 700; color: var(--good);
+    font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
+  }
+  .results .fp .fp-label { font-family: var(--sans); font-size: 12.5px; color: var(--muted); }
+  .results .sweep-note {
+    margin-top: 18px; padding: 12px 16px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+    font-size: 13px; color: var(--muted); line-height: 1.6;
+  }
+  .results .sweep-note b { color: var(--ink); font-weight: 600; }
+  .results .sweep-note .arrow { color: var(--accent); font-family: var(--mono); font-weight: 700; }
+
+  /* ---------------- limitations (alert-warning pattern) ---------------- */
+  .limit {
+    background: var(--warning-bg);
+    border-left: 4px solid var(--warning);
+    border-radius: var(--radius); padding: 26px 30px;
+    box-shadow: var(--shadow);
+    opacity: 0; animation: reveal 0.55s ease-out 0.05s forwards;
+    position: relative;
+  }
+  .limit-inner { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+  .limit svg { flex: none; width: 24px; height: 24px; stroke: var(--warning); margin-top: 4px; }
+  .limit .label {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--warning); font-weight: 700;
+  }
+  .limit p { margin: 6px 0 0; font-size: 16px; color: var(--ink); line-height: 1.6; text-wrap: balance; }
+  .limit p b { color: var(--warning); font-weight: 700; }
+
+  .future-work {
+    margin-top: 18px; padding-top: 18px; border-top: 1px solid color-mix(in srgb, var(--warning) 25%, var(--line));
+    display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
+  }
+  .future-work .label {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--muted); font-weight: 700; flex: none;
+  }
+  .future-work p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.55; flex: 1; min-width: 240px; }
+  .future-work p b { color: var(--ink); font-weight: 600; }
+
+  html.replaying, html.replaying *, html.replaying *::before, html.replaying *::after {
+    animation: none !important;
+  }
+
+  .replay-btn {
+    position: fixed; right: 22px; bottom: 22px;
+    display: flex; align-items: center; gap: 7px;
+    font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+    color: var(--ink); background: var(--surface); border: 1px solid var(--line);
+    border-radius: 20px; padding: 8px 14px 8px 12px; cursor: pointer;
+    box-shadow: var(--shadow); transition: transform 0.15s ease, border-color 0.15s ease;
+  }
+  .replay-btn:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .replay-btn:active { transform: translateY(0); }
+  .replay-btn svg { width: 13px; height: 13px; stroke: var(--accent); transition: transform 0.4s ease; }
+  .replay-btn.spinning svg { transform: rotate(-360deg); }
+  .replay-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="page-content">
+<p class="brand"><span class="brand-mark">◆</span> Custodia <span class="brand-sub">— chain of custody for training data</span></p>
+
+<nav class="tabbar" role="tablist" aria-label="Dashboard sections">
+  <button class="tab-btn active" id="tab-problem" data-tab="problem" role="tab" aria-selected="true" aria-controls="panel-problem" tabindex="0"><span class="tab-n">01</span>Problem &amp; Novelty</button>
+  <button class="tab-btn" id="tab-architecture" data-tab="architecture" role="tab" aria-selected="false" aria-controls="panel-architecture" tabindex="-1"><span class="tab-n">02</span>Architecture</button>
+  <button class="tab-btn" id="tab-attacks" data-tab="attacks" role="tab" aria-selected="false" aria-controls="panel-attacks" tabindex="-1"><span class="tab-n">03</span>Attack Surface</button>
+  <button class="tab-btn" id="tab-metrics" data-tab="metrics" role="tab" aria-selected="false" aria-controls="panel-metrics" tabindex="-1"><span class="tab-n">04</span>Evaluation Metrics</button>
+  <button class="tab-btn" id="tab-limitations" data-tab="limitations" role="tab" aria-selected="false" aria-controls="panel-limitations" tabindex="-1"><span class="tab-n">05</span>Limitations &amp; Future Work</button>
+</nav>
+
+<div class="tab-panel active" id="panel-problem" data-panel="problem" role="tabpanel" aria-labelledby="tab-problem" tabindex="0">
+  <div class="thesis">
+    <p class="eyebrow">Problem Statement</p>
+    <h1>Proving a model trained only on dataset X is worthless if X was never <em>trustworthy</em>.</h1>
+    <p class="insight"><b>Intent:</b> "Trustworthy" isn't one property — it's three separate questions, each checkable on its own: was the <b>source</b> honest, was the <b>handling</b> honest, can a stranger <b>verify</b> the result without taking my word for it.</p>
+  </div>
+  <div class="novelty">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+    <p><span class="tag">What's novel here</span>I took a pattern built to catch an <b>AI agent</b> quietly overstepping its authority across a chain of hand-offs — and rebuilt it, from scratch, to catch a <b>data pipeline</b> lying about what it did to your records. That cross-domain transfer is the idea; the cryptography underneath is standard, decades-old machinery, not the point. Then, live, I found a gap in my <b>own</b> transfer and closed it — I'd been checking <b>what</b> a step claimed, never <b>who</b> was allowed to claim it.</p>
+  </div>
+</div>
+
+<div class="tab-panel" id="panel-architecture" data-panel="architecture" role="tabpanel" aria-labelledby="tab-architecture" tabindex="0">
+  <div class="section-label"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg><span>Architecture — 3 layers, live against commoncrawl.org</span></div>
+  <div class="pipeline">
+
+    <div class="stage">
+      <div class="stage-head">
+        <div class="stage-head-left">
+          <span class="stage-num">01</span>
+          <span class="stage-name">Source Trust</span>
+        </div>
+        <span class="pill">Clean</span>
+      </div>
+      <div class="stage-mech">CT-log baseline diff · crt.sh</div>
+      <div class="stage-stat">689 <span class="dim">certs baselined · 0 anomalies</span></div>
+      <div class="checks">
+        <div class="check"><span class="dot"></span><span>Unknown-issuer detection</span></div>
+        <div class="check"><span class="dot"></span><span>Recently-issued flagging</span></div>
+        <div class="check"><span class="dot"></span><span>Unexpected-SAN detection</span></div>
+      </div>
+      <div class="catches">
+        <span class="label">Doesn't catch</span>
+        A legitimate source honestly shipping bad data.
+      </div>
+    </div>
+
+    <div class="connector">
+      <div class="arrow-line"><div class="flow-dot"></div></div>
+      <div class="arrow-head"></div>
+      <div class="arrow-label">source_<br>audit</div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-head">
+        <div class="stage-head-left">
+          <span class="stage-num">02</span>
+          <span class="stage-name">Pipeline Custody</span>
+        </div>
+        <span class="pill">Clean</span>
+      </div>
+      <div class="stage-mech">Ed25519-signed, hash-linked envelope chain</div>
+      <div class="stage-stat">4 <span class="dim">hops · 500 → 430 records</span></div>
+      <div class="checks">
+        <div class="check"><span class="dot"></span><span><b>Chain fidelity</b> — hop input = prior hop's real output</span></div>
+        <div class="check"><span class="dot"></span><span><b>Action grounding</b> — claimed effect vs. actual delta</span></div>
+        <div class="check"><span class="dot"></span><span><b>Transitive fidelity</b> — traces to a Layer-1-clean source</span></div>
+      </div>
+      <div class="catches">
+        <span class="label">Doesn't catch</span>
+        A declared action performed, but performed incorrectly.
+      </div>
+    </div>
+
+    <div class="connector">
+      <div class="arrow-line"><div class="flow-dot"></div></div>
+      <div class="arrow-head"></div>
+      <div class="arrow-label">pipeline_<br>audit</div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-head">
+        <div class="stage-head-left">
+          <span class="stage-num">03</span>
+          <span class="stage-name">Seal</span>
+        </div>
+        <span class="pill">Verified</span>
+      </div>
+      <div class="stage-mech">Merkle root + curator signature</div>
+      <div class="stage-stat" style="font-size:10.5px">2e67ae0a1d96… <span class="dim">signed &amp; verified</span></div>
+      <div class="checks">
+        <div class="check"><span class="dot"></span><span>Provenance check — signature valid?</span></div>
+        <div class="check"><span class="dot"></span><span>Integrity check — data still matches root?</span></div>
+        <div class="check"><span class="dot"></span><span>Per-record inclusion proof, no full dataset needed</span></div>
+      </div>
+      <div class="catches">
+        <span class="label">Doesn't catch</span>
+        Content the curator honestly, wrongly, vouched for.
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="tab-panel" id="panel-attacks" data-panel="attacks" role="tabpanel" aria-labelledby="tab-attacks" tabindex="0">
+  <div class="section-label"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V5l8-3z"></path></svg><span>Attack Surface — who can lie, and who catches it</span></div>
+
+  <div class="threat-board">
+    <div class="threat-lane">
+      <div class="threat-lane-head"><span class="layer-tag">L1</span><span class="name">Source Trust</span></div>
+      <div class="threat-card">
+        <div class="t-name">Unknown issuer</div>
+        <div class="t-caught">caught by → unknown-issuer detection</div>
+        <span class="t-evidence demo">verified live</span>
+      </div>
+      <div class="threat-card">
+        <div class="t-name">Unexpected SAN</div>
+        <div class="t-caught">caught by → SAN detection</div>
+        <span class="t-evidence demo">verified live</span>
+      </div>
+    </div>
+
+    <div class="threat-lane">
+      <div class="threat-lane-head"><span class="layer-tag">L2</span><span class="name">Pipeline Custody</span></div>
+      <div class="threat-card">
+        <div class="t-name">Laundered step (lies about its own effect)</div>
+        <div class="t-caught">caught by → action grounding + chain fidelity</div>
+        <span class="t-evidence">200/200 trials</span>
+      </div>
+      <div class="threat-card">
+        <div class="t-name">Broken chain (lies about what it received)</div>
+        <div class="t-caught">caught by → chain fidelity</div>
+        <span class="t-evidence">200/200 trials</span>
+      </div>
+      <div class="threat-card">
+        <div class="t-name">Untrusted source slipped into the chain</div>
+        <div class="t-caught">caught by → chain + transitive fidelity</div>
+        <span class="t-evidence">200/200 trials</span>
+      </div>
+      <div class="threat-card">
+        <div class="t-name">Right numbers, wrong role</div>
+        <div class="t-caught">caught by → actor authorization (live-built)</div>
+        <span class="t-evidence demo">verified live</span>
+      </div>
+    </div>
+
+    <div class="threat-lane">
+      <div class="threat-lane-head"><span class="layer-tag">L3</span><span class="name">Seal</span></div>
+      <div class="threat-card">
+        <div class="t-name">Post-seal tampering</div>
+        <div class="t-caught">caught by → Merkle root mismatch, localizes to the exact record</div>
+        <span class="t-evidence demo">verified live</span>
+      </div>
+    </div>
+
+    <div class="threat-accepted">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+      <div>
+        <div class="t-name">Signed-but-poisoned: honestly sealed, poisoned before anyone here ever saw it</div>
+        <div class="t-caught">nothing catches this — no layer inspects content, only custody</div>
+        <span class="t-evidence">accepted risk → see Limitations</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="tab-panel" id="panel-metrics" data-panel="metrics" role="tabpanel" aria-labelledby="tab-metrics" tabindex="0">
+  <div class="section-label"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg><span>Evaluation Metrics</span></div>
+  <div class="results">
+    <p class="results-eyebrow">Proof, not assertion — 200 adversarial trials per attack type</p>
+    <div class="results-top">
+      <div class="stat-row">
+        <div class="stat"><span class="n" data-count-to="200">0</span><span class="k">action mismatch caught</span></div>
+        <div class="stat"><span class="n" data-count-to="200">0</span><span class="k">input mismatch caught</span></div>
+        <div class="stat"><span class="n" data-count-to="200">0</span><span class="k">untrusted source caught</span></div>
+      </div>
+      <div class="fp"><span class="n2">0/144</span><span class="fp-label">false positives on clean baseline</span></div>
+    </div>
+    <div class="sweep-note">
+      <span class="arrow">↳</span> first sweep found <b>16</b> apparent false positives — traced to a rounding artifact in my own test generator, not the detector. Fixed. Re-swept: <b>0/144</b>.
+    </div>
+  </div>
+</div>
+
+<div class="tab-panel" id="panel-limitations" data-panel="limitations" role="tabpanel" aria-labelledby="tab-limitations" tabindex="0">
+  <div class="section-label"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg><span>Limitations &amp; Future Work</span></div>
+  <div class="limit">
+    <div class="limit-inner">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+      <div>
+        <span class="label">Limitations</span>
+        <p>Every layer here proves <b>custody</b> — the data wasn't altered in transit, and someone is accountable for it. That's a real guarantee, and it's also a boundary I drew <b>on purpose</b>: no layer inspects content, only the chain of custody around it. A curator can honestly sign data that was poisoned before it ever reached them — this system says nothing about that, by design, not by oversight.</p>
+      </div>
+    </div>
+    <div class="future-work">
+      <span class="label">Where I'd take this</span>
+      <p>That boundary is exactly where the real research question starts — closing it needs <b>multi-party attestation</b> or <b>content-level verification</b>. I'm not claiming to have solved it. I'm claiming to have found precisely where it begins, and that's where I'd want to spend a fellowship.</p>
+    </div>
+  </div>
+</div>
+</div>
+
+<button class="replay-btn" id="replayBtn" type="button" aria-label="Replay this section's animation">
+  <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3.5H10" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  Replay
+</button>
+
+<script>
+(function () {
+  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab-btn'));
+  var panels = Array.prototype.slice.call(document.querySelectorAll('.tab-panel'));
+
+  function runCounters(scope) {
+    scope.querySelectorAll('[data-count-to]').forEach(function (el) {
+      var target = parseInt(el.getAttribute('data-count-to'), 10);
+      if (reduceMotion) { el.textContent = target + '/' + target; return; }
+      el.textContent = '0/' + target;
+      var start = null;
+      var duration = 900;
+      function step(ts) {
+        if (start === null) start = ts;
+        var progress = Math.min((ts - start) / duration, 1);
+        var eased = 1 - Math.pow(1 - progress, 3);
+        el.textContent = Math.round(eased * target) + '/' + target;
+        if (progress < 1) requestAnimationFrame(step);
+      }
+      setTimeout(function () { requestAnimationFrame(step); }, reduceMotion ? 0 : 500);
+    });
+  }
+
+  function activate(name, moveFocus) {
+    tabs.forEach(function (b) {
+      var on = b.dataset.tab === name;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+      b.setAttribute('tabindex', on ? '0' : '-1');
+      if (on && moveFocus) b.focus();
+    });
+    panels.forEach(function (p) { p.classList.toggle('active', p.dataset.panel === name); });
+    var active = document.querySelector('.tab-panel[data-panel="' + name + '"]');
+    if (name === 'metrics') runCounters(active);
+  }
+
+  tabs.forEach(function (b, i) {
+    b.addEventListener('click', function () { activate(b.dataset.tab, false); });
+    b.addEventListener('keydown', function (e) {
+      var next = null;
+      if (e.key === 'ArrowRight') next = tabs[(i + 1) % tabs.length];
+      else if (e.key === 'ArrowLeft') next = tabs[(i - 1 + tabs.length) % tabs.length];
+      else if (e.key === 'Home') next = tabs[0];
+      else if (e.key === 'End') next = tabs[tabs.length - 1];
+      if (next) { e.preventDefault(); activate(next.dataset.tab, true); }
+    });
+  });
+
+  var replayBtn = document.getElementById('replayBtn');
+  replayBtn.addEventListener('click', function () {
+    replayBtn.classList.add('spinning');
+    var activeTab = document.querySelector('.tab-btn.active').dataset.tab;
+    var activePanel = document.querySelector('.tab-panel.active');
+    document.documentElement.classList.add('replaying');
+    void document.documentElement.offsetHeight;
+    document.documentElement.classList.remove('replaying');
+    if (activeTab === 'metrics') runCounters(activePanel);
+    setTimeout(function () { replayBtn.classList.remove('spinning'); }, 450);
+  });
+})();
+</script>

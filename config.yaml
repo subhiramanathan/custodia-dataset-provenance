@@ -1,0 +1,12 @@
+watchlist:
+  - domain: commoncrawl.org
+    description: "Common Crawl - web crawl corpus used in many LLM pretraining datasets"
+  - domain: huggingface.co
+    description: "Hugging Face - primary dataset distribution platform"
+
+audit:
+  recently_issued_threshold_days: 7
+
+root_spec:
+  allowed_source_domains: ["commoncrawl.org"]
+  max_total_records: 500
